@@ -11,10 +11,11 @@ Tested on Debian 8. Writen for Debian distro (Kali etc.)
 
 ## How to use
 
-In terminal use:  
+In terminal make it executable:  
 ```
 chmod +x Terminal_Manager.sh   
 ```
+Run:  
 ```
 ./Terminal_Manager.sh   
 ```
