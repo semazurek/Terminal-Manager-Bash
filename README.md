@@ -1,6 +1,6 @@
 # Terminal-Manager-Bash
 
-Unix Shell Script used to remote management with some few features.  
+Unix Shell Script used for remote management with some few features.  
 Tested on Debian 8. Writen for Debian distro (Kali etc.)
 
 ## What it can do
