@@ -1,41 +1,69 @@
 #!/bin/bash
 
-# Funkcja sprawdzajaca wymagane moduly do działania programu
-check_install () {
-clear
-STATUS_OK=$(dpkg-query -W --showformat='${Status}\n' $WYMAGANE|grep "install ok installed")
-echo Sprawdzanie pakietu potrzebnego w skrypcie: $WYMAGANE: $STATUS_OK
-if [ "" = "$STATUS_OK" ]; then
-  echo "Brak: $WYMAGANE. Instalowanie: $WYMAGANE."
-  sudo apt-get --yes install $WYMAGANE 
+# 1. Wykrywanie dostępnego menedżera pakietów w systemie
+if command -v apt-get &> /dev/null; then
+    PKG_MANAGER="apt"
+elif command -v dnf &> /dev/null; then
+    PKG_MANAGER="dnf"
+else
+    echo "Error: Supported package manager (apt or dnf) not found."
+    exit 1
 fi
+
+# 2. Uniwersalna funkcja sprawdzająca i instalująca pakiety
+check_install () {
+    clear
+    local PROGRAM="$1"
+    local PACKAGE_NAME="$1"
+    local COMMAND_NAME="$1"
+    
+    # Mapowanie nazw dla narzędzi różniących się między dystrybucjami
+    if [ "$PKG_MANAGER" = "dnf" ]; then
+        if [ "$PROGRAM" = "xprobe" ]; then
+            PACKAGE_NAME="xprobe2"
+            COMMAND_NAME="xprobe2"
+        fi
+    fi
+    
+    echo "Checking required package: $PROGRAM..."
+
+    # Sprawdzenie, czy polecenie jest już dostępne w systemie (używamy COMMAND_NAME)
+    if ! command -v "$COMMAND_NAME" &> /dev/null; then
+        echo "Missing: $PROGRAM. Installing: $PACKAGE_NAME..."
+        
+        if [ "$PKG_MANAGER" = "apt" ]; then
+            sudo apt-get --yes install "$PACKAGE_NAME"
+        elif [ "$PKG_MANAGER" = "dnf" ]; then
+            # Specjalna obsługa dla scrcpy na Fedorze (wymaga repozytorium COPR)
+            if [ "$PROGRAM" = "scrcpy" ]; then
+                sudo dnf copr enable -y zeno/scrcpy
+            fi
+            sudo dnf -y install "$PACKAGE_NAME"
+        fi
+    else
+        echo "Package $PROGRAM is already installed [OK]."
+    fi
 }
 
-#Okienko menu wyboru
-WYMAGANE="dialog"
-check_install
+# --- Wywołanie funkcji dla poszczególnych narzędzi ---
+
+# Okienko menu wyboru
+check_install "dialog"
 
 # Dyski/napędy informacje nazwa/pojemnosc SCSI
-WYMAGANE="lsscsi"
-check_install
+check_install "lsscsi"
 
-#Informacje o systemie
-WYMAGANE="lshw"
-check_install
+# Informacje o systemie
+check_install "lshw"
 
-#Remote Desktop VNC/RDP
-WYMAGANE="remmina"
-check_install
+# Remote Desktop VNC/RDP
+check_install "remmina"
 
-#Remote Android ADB-DEV OPS
-WYMAGANE="scrcpy"
-check_install
+# Remote Android ADB-DEV OPS
+check_install "scrcpy"
 
-#Xprobe2 IP host OS information
-WYMAGANE="xprobe"
-check_install
-
-
+# Xprobe2 IP host OS information
+check_install "xprobe"
 # Przypisanie zmiennych
 user=$(whoami)
 host=$(hostname)
@@ -49,8 +77,9 @@ clear
 HEIGHT=16
 WIDTH=55
 CHOICE_HEIGHT=4
-BACKTITLE="Terminal Manager v2.1.5.20"
+BACKTITLE="Terminal Manager v2.6.10.18"
 # 2021.05.20 Created by Rikey
+# 2026.10.19 Updated
 TITLE="Terminal Manager"
 MENU="User: ${user^} Host: $host IP: $ip_local"
 OPTIONS=(1 "Show Information About System"
@@ -187,25 +216,37 @@ case $CHOICE in
       		  ;;
       		  esac
       			;;
-		8)
-      	  	  clear
-      	   	  sudo apt-get update
-      	   	  sudo apt-get upgrade -y
-      	   	  sudo apt-get dist-upgrade -y
-      	    	 ;;
-      	       9)
-      	    	 clear
-      	    	 sudo apt-get autoclean -y
-      	    	 sudo apt-get clean -y
-      	    	 sudo apt-get autoremove -y
-      	   	  rm -rf ~/.cache/thumbnails/*
-      	    	 sudo journalctl --vacuum-time=3d
-      	  	   set -eu
-		snap list --all | awk '/disabled/{print $1, $3}' |
-   		 while read snapname revision; do
-     		   snap remove "$snapname" --revision="$revision"
-   		 done
-           ;;
+			  8)
+    			clear
+    			if [ "$PKG_MANAGER" = "apt" ]; then
+        			sudo apt-get update
+        			sudo apt-get upgrade -y
+        			sudo apt-get dist-upgrade -y
+    			elif [ "$PKG_MANAGER" = "dnf" ]; then
+        			sudo dnf check-update
+        			sudo dnf upgrade -y
+        			sudo dnf distro-sync -y
+    			fi
+    			;;
+      	      9)
+    			clear
+    			if [ "$PKG_MANAGER" = "apt" ]; then
+        			sudo apt-get autoclean -y
+        			sudo apt-get clean -y
+        			sudo apt-get autoremove -y
+    			elif [ "$PKG_MANAGER" = "dnf" ]; then
+        			sudo dnf clean packages -y
+        			sudo dnf clean all -y
+        			sudo dnf autoremove -y
+    			fi
+    			rm -rf ~/.cache/thumbnails/*
+    			sudo journalctl --vacuum-time=3d
+    			set -eu
+    			snap list --all | awk '/disabled/{print $1, $3}' |
+    			while read snapname revision; do
+        		snap remove "$snapname" --revision="$revision"
+    			done
+    				;;
 esac
 
 done
